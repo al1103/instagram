@@ -1,0 +1,426 @@
+import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:auto_route/auto_route.dart';
+import 'package:buffered_list_stream/buffered_list_stream.dart';
+import 'package:flutter/material.dart';
+import 'package:pitch_detector_dart/pitch_detector.dart';
+import 'package:record/record.dart';
+import 'package:susan_violin/core/presentation/widgets/gap.dart';
+import 'package:susan_violin/gen/assets.gen.dart';
+
+enum TypeNote { A, D, E, G }
+
+@RoutePage()
+class TunerPage extends StatefulWidget {
+  const TunerPage({super.key});
+
+  @override
+  State<TunerPage> createState() => _TunerPageState();
+}
+
+class _TunerPageState extends State<TunerPage> {
+  TypeNote _selectedNote = TypeNote.A;
+  double _valueHzSelected = 442;
+  final _record = AudioRecorder();
+  final _pitchDetector = PitchDetector();
+  StreamSubscription<List<int>>? _recordListener;
+  final List<double> _hz = [440, 294.7, 196, 662.1];
+  final List<double> _notesFrequency = [];
+  int _counterHz = 0;
+  int _counterNotSound = 0;
+  int? _noteIsPerfect;
+  bool _isShowHzAvg = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _initRecordAudio();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+    _recordListener?.cancel();
+    _record.cancel();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFAFAFA),
+      appBar: AppBar(
+        title: const Text(
+          'Tuner',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        leading: InkWell(
+          onTap: context.router.maybePop,
+          child: const Center(child: Icon(Icons.arrow_back_sharp)),
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.only(top: 24, bottom: 16),
+                child: Column(
+                  children: [
+                    Text(
+                      _selectedNote.name,
+                      style: const TextStyle(
+                        color: Color(0xFF06598E),
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Gap.h4,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD0E5F2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'Target: $_valueHzSelected Hz',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF137DC0),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _progressBar(_noteIsPerfect ?? 5),
+                    ...<Widget>[
+                      Gap.h16,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getColorBackgroundStatus,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          _getTitle ?? '',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Gap.h4,
+                      const Text(
+                        'Actual',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Color(0xFF2E2E2E),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        _displayHzAvg,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          color: Color.fromARGB(255, 90, 30, 30),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Column(
+                    children: [
+                      _itemNote(TypeNote.D),
+                      const SizedBox(height: 16),
+                      _itemNote(TypeNote.G),
+                    ],
+                  ),
+                  Expanded(child: _getImageViolinByNote(_selectedNote)),
+                  Column(
+                    children: [
+                      _itemNote(TypeNote.A),
+                      const SizedBox(height: 16),
+                      _itemNote(TypeNote.E),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _getImageViolinByNote(TypeNote note) {
+    switch (note) {
+      case TypeNote.A:
+        return Assets.svg.tunerNoteA.svg();
+      case TypeNote.D:
+        return Assets.svg.tunerNoteD.svg();
+      case TypeNote.E:
+        return Assets.svg.tunerNoteE.svg();
+      case TypeNote.G:
+        return Assets.svg.tunerNoteG.svg();
+    }
+  }
+
+  Widget _itemNote(TypeNote note) {
+    const radius = Radius.circular(32);
+    return GestureDetector(
+      onTap: () {
+        if (_selectedNote != note) {
+          _selectedNote = note;
+          switch (note) {
+            case TypeNote.A:
+              _valueHzSelected = 440.0;
+              _counterHz = 0;
+            case TypeNote.D:
+              _valueHzSelected = 294.7;
+              _counterHz = 1;
+            case TypeNote.G:
+              _valueHzSelected = 196.0;
+              _counterHz = 2;
+            case TypeNote.E:
+              _counterHz = 3;
+              _valueHzSelected = 662.1;
+          }
+          _notesFrequency.clear();
+          setState(() {});
+        }
+      },
+      child: Container(
+        height: 56,
+        width: 60,
+        decoration: BoxDecoration(
+          color: _selectedNote == note
+              ? const Color(0xFF137DC0)
+              : const Color(0xFFD0E5F2),
+          borderRadius: note == TypeNote.D || note == TypeNote.G
+              ? const BorderRadius.only(topRight: radius, bottomRight: radius)
+              : const BorderRadius.only(topLeft: radius, bottomLeft: radius),
+          boxShadow: [
+            BoxShadow(
+              offset: const Offset(0, 4),
+              blurRadius: 12,
+              color: const Color(0xFF737373).withOpacity(0.2),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          note.name,
+          style: TextStyle(
+            color:
+                _selectedNote != note ? const Color(0xFF06598E) : Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _initRecordAudio() async {
+    if (await _record.hasPermission()) {
+      final recordStream = await _record.startStream(
+        const RecordConfig(encoder: AudioEncoder.pcm16bits, numChannels: 1),
+      );
+      final audioSampleBufferedStream = bufferedListStream(
+        recordStream.map((event) {
+          return event.toList();
+        }),
+        //The library converts a PCM16 to 8bits internally.
+        // So we need twice as many bytes
+        PitchDetector.DEFAULT_BUFFER_SIZE * 2,
+      );
+      _recordListener =
+          audioSampleBufferedStream.listen(_handlePitchReCordStream);
+    }
+  }
+
+  void _handlePitchReCordStream(List<int> buffer) {
+    final intBuffer = Uint8List.fromList(buffer);
+    _pitchDetector.getPitchFromIntBuffer(intBuffer).then(
+      (detectedPitch) {
+        if (detectedPitch.pitch > 140) {
+          if (_notesFrequency.length < 20) {
+            _notesFrequency.add(detectedPitch.pitch);
+          } else {
+            _notesFrequency.add(detectedPitch.pitch);
+            _checkFrequency(_hzAvg);
+          }
+        } else {
+          _counterNotSound++;
+          if (_counterNotSound >= 40) {
+            _isShowHzAvg = false;
+            _counterNotSound = 0;
+            _noteIsPerfect = null;
+            setState(() {});
+          }
+        }
+      },
+    );
+  }
+
+  void _checkFrequency(double pitch) {
+    if (pitch >= _hz[_counterHz] - 10 && pitch <= _hz[_counterHz] + 10) {
+      _noteIsPerfect = 5;
+    } else {
+      _noteIsPerfect = checkNumber((pitch - _hz[_counterHz]).ceil());
+    }
+    _notesFrequency.clear();
+    setState(() {});
+  }
+
+  double get _hzAvg {
+    var sum = 0.0;
+    for (final e in _notesFrequency) {
+      sum += e;
+    }
+    return sum / _notesFrequency.length;
+  }
+
+  String get _displayHzAvg {
+    if (_notesFrequency.isEmpty || _isShowHzAvg == false) {
+      return '';
+    }
+
+    return '${_hzAvg.toStringAsFixed(1)}Hz';
+  }
+
+  Color? _getColor(int index, int value) {
+    if (index == 0 || index == 10) {
+      return Colors.transparent;
+    }
+    if (_noteIsPerfect == 5 && index == 5) {
+      return const Color(0xFF52C41A);
+    }
+    if (_noteIsPerfect != null &&
+        _noteIsPerfect! < 5 &&
+        (index == value + 1 || index == value - 1 || index == value)) {
+      return const Color(0xFFF5222D);
+    }
+    if (_noteIsPerfect != null &&
+        _noteIsPerfect! > 5 &&
+        (index == value + 1 || index == value - 1 || index == value)) {
+      return const Color(0xFFFAAD14);
+    }
+    return const Color(0xFFD0E5F2);
+  }
+
+  Color? get _getColorBackground {
+    if (_noteIsPerfect == 5) {
+      return Colors.transparent;
+    }
+    if (_noteIsPerfect != null && _noteIsPerfect! < 5) {
+      return const Color(0xFFFFF1F0);
+    }
+    if (_noteIsPerfect != null && _noteIsPerfect! > 5) {
+      return const Color(0xFFFFFBE6);
+    }
+    return null;
+  }
+
+  Color? get _getColorBackgroundStatus {
+    if (_noteIsPerfect == 5) {
+      return const Color(0xFF52C41A);
+    }
+    if (_noteIsPerfect != null && _noteIsPerfect! < 5) {
+      return const Color(0xFFF5222D);
+    }
+    if (_noteIsPerfect != null && _noteIsPerfect! > 5) {
+      return const Color(0xFFFAAD14);
+    }
+    return null;
+  }
+
+  String? get _getTitle {
+    if (_noteIsPerfect == null) return null;
+    if (_noteIsPerfect == 5) return 'Perfect';
+    if (_noteIsPerfect != null && _noteIsPerfect! < 5) return 'Low';
+    return 'High';
+  }
+
+  Widget _progressBar(int value) {
+    final widthItem = (MediaQuery.of(context).size.width) / 10;
+    return Stack(
+      children: [
+        Positioned(
+          top: 0,
+          left: (value == 0)
+              ? 0
+              : (value == 10)
+                  ? widthItem * 9
+                  : widthItem * (value - 1),
+          right: (value == 0)
+              ? widthItem * 9
+              : (value == 10)
+                  ? 0
+                  : widthItem * (10 - value - 1),
+          child: SizedBox(
+            height: 60,
+            child: Container(
+              decoration: BoxDecoration(
+                color: _getColorBackground,
+              ),
+            ),
+          ),
+        ),
+        SizedBox(
+          width: MediaQuery.of(context).size.width,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(11, (index) {
+              return tick(
+                index: index,
+                value: value,
+              );
+            }),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget tick({required int index, required int value}) {
+    return Column(
+      children: [
+        Container(
+          width: 4,
+          height: index != 5 ? 40 : 60,
+          decoration: ShapeDecoration(
+            color: _getColor(index, value),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(9.18),
+            ),
+          ),
+        ),
+        Gap.h4,
+      ],
+    );
+  }
+
+  int checkNumber(int result) {
+    if (result < -50) return 0;
+    if (result < -25) return 2;
+    if (result < 0) return 4;
+    if (result == 0) return 5;
+    if (result < 25) return 6;
+    if (result < 50) return 8;
+    return 10;
+  }
+}
