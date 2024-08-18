@@ -1,7 +1,5 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:network_social/gen/assets.gen.dart';
 import 'package:network_social/modules/home/presentation/page/login_screen.dart';
 import 'package:network_social/widgets/text_field_input.dart';
@@ -162,7 +160,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   GestureDetector(
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => const LoginScreen(),
+                        builder: (context) => const LoginPage(),
                       ),
                     ),
                     child: Container(

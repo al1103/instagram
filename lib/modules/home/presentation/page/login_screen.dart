@@ -1,20 +1,22 @@
+import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:network_social/common/routers/app_route.dart';
 import 'package:network_social/gen/assets.gen.dart';
 import 'package:network_social/modules/home/presentation/page/signup_screen.dart';
 import 'package:network_social/widgets/text_field_input.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+@RoutePage()
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<LoginPage> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  bool _isLoading = false;
+  final bool _isLoading = false;
 
   @override
   void dispose() {
@@ -24,9 +26,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void loginUser() async {
-    setState(() {
+    /*setState(() {
       _isLoading = true;
-    });
+    });*/
   }
 
   @override
@@ -47,7 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 flex: 2,
                 child: Container(),
               ),
-              Assets.svg.logo.svg(width: 100, height: 100, color: Colors.white),
+              Assets.svg.logo.svg(width: 64, height: 64, color: Colors.white),
               const SizedBox(
                 height: 64,
               ),
@@ -69,7 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 height: 24,
               ),
               InkWell(
-                onTap: loginUser,
+                onTap: () => {context.router.push(const HomeRoute())},
                 child: Container(
                   width: double.infinity,
                   alignment: Alignment.center,
